@@ -1,0 +1,42 @@
+# Prerequisites & build directories
+build/
+bin/
+out/
+cmake-build-*/
+.cache/
+
+# IDE & Editor artifacts
+.vs/
+*.sln
+*.vcxproj*
+*.user
+*.suo
+.vscode/
+.idea/
+
+# Compiled libraries / binaries
+*.obj
+*.o
+*.lib
+*.a
+*.dll
+*.so
+*.dylib
+*.exe
+*.pdb
+
+# Proprietary Game Assets & Archives (Never commit copyrighted Sega files)
+*.zip
+*.7z
+*.rar
+*.iso
+*.bin
+*.cue
+assets/*
+!assets/.gitkeep
+
+# System & temporary files
+*.tmp
+*.log
+Thumbs.db
+.DS_Store
