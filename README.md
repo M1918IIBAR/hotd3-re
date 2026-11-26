@@ -95,18 +95,22 @@ hotd3-re/
 
 ## Status
 
-> 🚧 **Early Development** — Phase 0 (Reverse Engineering & Documentation)
+> 🚧 **Active Development** — Phase 1 (Engine Core & Asset Pipeline)
 
+- [x] Data file format documentation (`docs/file_formats.md`)
+- [x] Asset extractor tool & archive unpacking (`tools/extract_assets.ps1`)
+- [x] Clean-room format parsers: Sega AFS, DDS textures, Chihiro XMX models (`src/formats/`)
+- [x] Skeleton engine with SDL2 window (`src/core/`, `src/main.cpp`)
+- [x] DX11 rendering backend & shader pipeline (`src/render/dx11/`)
+- [x] Game state machine (`src/core/state_machine.h`)
+- [x] Input system with mouse & light gun abstraction (`src/input/`)
+- [x] Audio engine subsystem (`src/audio/`)
+- [x] Rails camera & scene manager (`src/scene/`)
+- [x] HUD, ammo shells, crosshairs & boss health bar (`src/ui/`)
+- [x] Hit detection & shotgun raycasting (`src/physics/`)
 - [ ] Binary analysis and function labeling in Ghidra
-- [ ] Data file format documentation
-- [ ] Asset extractor tool
-- [ ] Skeleton engine with SDL2 window
-- [ ] DX11 rendering backend
-- [ ] Title screen rendering
-- [ ] Game state machine
-- [ ] Input system
-- [ ] Audio engine
-- [ ] Gameplay systems
+- [ ] Title screen rendering & attract mode video playback
+- [ ] Gameplay systems & enemy AI
 - [ ] Vulkan rendering backend
 - [ ] Cross-platform builds
 

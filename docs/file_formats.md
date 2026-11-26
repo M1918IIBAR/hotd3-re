@@ -81,21 +81,41 @@ In *The House of the Dead III*, several AFS containers (such as `SPR.AFS`, `MDL.
   * **A8R8G8B8** (uncompressed 32-bit RGBA)
 * Easily ingested natively by DirectX 11 (`DirectXTex` / D3D11 resource creation) and Vulkan.
 
-### 3.2 3D Models (`.xmx`)
-* Header Magic: `4C-44-4D-58-58-4F-42-58` (`XMDL` + `XBOX` in little-endian format).
-* Sub-header: `MDEL` (`4C-45-44-4D`).
-* Originates from Sega Chihiro arcade hardware (Xbox XDK architecture).
-* Contains indexed triangle strips/lists, bone weights, vertex positions, normals, and UV coordinates compatible with DirectX 8 fixed-function / vertex shader pipelines.
+### 3.2 3D Models & Stages (`.xmx`, `.x3x`)
+* **Character/Enemy Models (`.xmx`)**:
+  * Header Magic: `4C-44-4D-58-58-4F-42-58` (`XMDL` + `XBOX` in little-endian format).
+  * Sub-header: `MDEL` (`4C-45-44-4D`).
+  * Originates from Sega Chihiro arcade hardware (Xbox XDK architecture).
+  * Contains indexed triangle strips/lists, bone weights, vertex positions, normals, and UV coordinates compatible with modern GPU vertex buffers.
+* **Stage Environment Geometry (`.x3x` in `X3D.AFS`)**:
+  * Header Magic: `4F-44-33-58-58-4F-42-58` (`X3DO` + `XBOX` in little-endian format).
+  * Sub-header: `OBJ3` (`33-4A-42-4F`).
+  * Contains world-space static level meshes, materials, and sector bounds.
+* **Stage Animations (`.xax` in `X3D.AFS`)**:
+  * Environmental object animation tracks and keyframes.
 
-### 3.3 Audio Streams (`.adx` inside AFS)
-* CRI Middleware ADX audio compression.
-* Signature: `0x80 0x00` (big-endian).
-* Audio parameters:
-  * Sample Rate: Typically 48,000 Hz (`0x0000BB80`)
-  * Channels: Stereo (2) or Mono (1)
+### 3.3 Audio Streams & Sound Effects
+* **BGM & Voice Lines (`.adx` in `BGM.AFS`, `VOICE_US.AFS`)**:
+  * CRI Middleware ADX adaptive differential PCM compression.
+  * Signature: `0x80 0x00` (big-endian).
+  * Sample Rate: Typically 48,000 Hz (`0x0000BB80`).
+  * Channels: Stereo (2) for BGM, Mono (1) for voice lines.
+* **Sound Effects (`media/*.aif`)**:
+  * *Reverse-Engineering Discovery*: Despite the `.aif` extension, all 576 audio files in `media/` are standard Microsoft **RIFF WAVE PCM 16-bit** audio (typically 22,050 Hz Mono). Can be parsed directly with standard PCM WAVE loaders.
   * Codec: CRI ADX adaptive differential pulse-code modulation.
 
 ### 3.4 Full-Motion Video (`.sfd`)
 * Sega Sofdec (SFD) container.
 * Video stream: MPEG-1 or MPEG-2 elementary video.
 * Audio stream: Multiplexed CRI ADX audio.
+
+---
+
+## 4. Reverse-Engineered Extraction Quirks
+
+During extraction of all 21 Sega AFS containers in `assets/game_data/fs`:
+1. **Filename Paths**: Certain archives (e.g. `BGM.AFS`, `VOICE_US.AFS`) contain relative source paths (e.g., `../ok/fs/adx/bgm001.adx`). When unpacking, paths must be sanitized using `Path.GetFileName` to prevent directory traversal outside the target folder.
+2. **32-Byte Truncation**: Filename records are fixed at 32 bytes without terminating null padding for long names. For instance, `../ok/fs/voice_us/voice_c_028.ad` truncates the trailing `x` in `.adx`.
+3. **Implicit Name Containers**: Certain archives (such as `MDL.AFS`) have `dirOffset == 0`, meaning no string table is present. Entries are numbered sequentially (`entry_0`, `entry_1`, ...) and identified by payload magic (`PK\x03\x04` ZIP containers containing `.xmx` and `.dds`).
+4. **Layout Tables (`SPRTBL.AFS`)**: Houses localized sprite table definitions (`sprtbl_u.bin` for US, `sprtbl_j.bin` for Japan, `sprtbl_f.bin` for France, `sprtbl_g.bin` for Germany, `sprtbl_i.bin` for Italy, `sprtbl_s.bin` for Spain).
+5. **Subtitle Dictionaries (`JIMAKU.AFS`)**: Contains chapter and dialog subtitles per language code (`chap_en.bin`, `d1_en.bin`, etc.).

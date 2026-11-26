@@ -20,6 +20,7 @@ class IRenderer;
 class InputManager;
 class AudioManager;
 class SceneManager;
+class Hud;
 
 class Game {
 public:
@@ -45,6 +46,9 @@ public:
     ConfigManager& config_manager() { return config_manager_; }
     IRenderer* renderer() { return renderer_.get(); }
     InputManager* input() { return input_.get(); }
+    AudioManager* audio() { return audio_.get(); }
+    SceneManager* scene() { return scene_.get(); }
+    Hud* hud() { return hud_.get(); }
 
     // Global instance (set during init, cleared during shutdown)
     static Game* instance();
@@ -57,6 +61,7 @@ private:
     std::unique_ptr<InputManager> input_;
     std::unique_ptr<AudioManager> audio_;
     std::unique_ptr<SceneManager> scene_;
+    std::unique_ptr<Hud>          hud_;
 
     // SDL
     SDL_Window* window_ = nullptr;

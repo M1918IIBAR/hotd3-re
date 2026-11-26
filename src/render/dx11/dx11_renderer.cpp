@@ -4,10 +4,13 @@
 #ifdef HOTD3_HAS_DX11
 
 #include "render/dx11/dx11_renderer.h"
+#include "formats/dds_loader.h"
+#include "render/common/shader_defs.h"
 
 #include <SDL.h>
 #include <SDL_syswm.h>
 #include <cstdio>
+#include <algorithm>
 
 namespace hotd3 {
 
@@ -334,48 +337,179 @@ void DX11Renderer::end_frame() {
     swap_chain_->Present(vsync_ ? 1 : 0, 0);
 }
 
-// ── Resource management (stubs to be implemented) ────────────────────────────
+// ── Resource management ──────────────────────────────────────────────────────
+
+static DXGI_FORMAT get_dxgi_format(TextureFormat format) {
+    switch (format) {
+        case TextureFormat::RGBA8:   return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case TextureFormat::BGRA8:   return DXGI_FORMAT_B8G8R8A8_UNORM;
+        case TextureFormat::DXT1:    return DXGI_FORMAT_BC1_UNORM;
+        case TextureFormat::DXT3:    return DXGI_FORMAT_BC2_UNORM;
+        case TextureFormat::DXT5:    return DXGI_FORMAT_BC3_UNORM;
+        case TextureFormat::R8:      return DXGI_FORMAT_R8_UNORM;
+        default:                     return DXGI_FORMAT_UNKNOWN;
+    }
+}
+
+static u32 calculate_pitch(TextureFormat format, u32 width) {
+    switch (format) {
+        case TextureFormat::DXT1:
+            return std::max(1u, (width + 3) / 4) * 8;
+        case TextureFormat::DXT3:
+        case TextureFormat::DXT5:
+            return std::max(1u, (width + 3) / 4) * 16;
+        case TextureFormat::RGBA8:
+        case TextureFormat::BGRA8:
+            return width * 4;
+        case TextureFormat::R8:
+            return width;
+        default:
+            return width * 4;
+    }
+}
 
 MeshHandle DX11Renderer::upload_mesh(const MeshData& data) {
-    // TODO: Create vertex + index buffers
+    if (!device_ || data.vertices.empty()) return {};
+
+    DX11Mesh mesh{};
+
+    // Vertex Buffer
+    D3D11_BUFFER_DESC vbd{};
+    vbd.ByteWidth = static_cast<UINT>(data.vertices.size() * sizeof(Vertex));
+    vbd.Usage = D3D11_USAGE_IMMUTABLE;
+    vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+
+    D3D11_SUBRESOURCE_DATA vd{};
+    vd.pSysMem = data.vertices.data();
+
+    HRESULT hr = device_->CreateBuffer(&vbd, &vd, &mesh.vb);
+    if (FAILED(hr)) return {};
+
+    // Index Buffer
+    if (!data.indices.empty()) {
+        D3D11_BUFFER_DESC ibd{};
+        ibd.ByteWidth = static_cast<UINT>(data.indices.size() * sizeof(u32));
+        ibd.Usage = D3D11_USAGE_IMMUTABLE;
+        ibd.BindFlags = D3D11_BIND_INDEX_BUFFER;
+
+        D3D11_SUBRESOURCE_DATA id{};
+        id.pSysMem = data.indices.data();
+
+        hr = device_->CreateBuffer(&ibd, &id, &mesh.ib);
+        if (FAILED(hr)) return {};
+
+        mesh.index_count = static_cast<u32>(data.indices.size());
+    }
+
     MeshHandle h;
     h.id = next_mesh_id_++;
+    meshes_[h.id] = std::move(mesh);
     return h;
 }
 
 void DX11Renderer::destroy_mesh(MeshHandle handle) {
-    // TODO: Release vertex + index buffers
+    if (!handle.valid()) return;
+    meshes_.erase(handle.id);
 }
 
-void DX11Renderer::draw_mesh(MeshHandle mesh, const Mat4& transform,
+void DX11Renderer::draw_mesh(MeshHandle mesh, const Mat4& /*transform*/,
                               TextureHandle texture) {
-    // TODO: Set constant buffer, bind mesh, draw
+    if (!context_ || !mesh.valid()) return;
+
+    auto it = meshes_.find(mesh.id);
+    if (it == meshes_.end()) return;
+
+    const auto& dx_mesh = it->second;
+
+    UINT stride = sizeof(Vertex);
+    UINT offset = 0;
+    ID3D11Buffer* vb = dx_mesh.vb.Get();
+    context_->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+
+    if (dx_mesh.ib) {
+        context_->IASetIndexBuffer(dx_mesh.ib.Get(), DXGI_FORMAT_R32_UINT, 0);
+    }
+
+    if (texture.valid()) {
+        auto tit = textures_.find(texture.id);
+        if (tit != textures_.end()) {
+            ID3D11ShaderResourceView* srv = tit->second.Get();
+            context_->PSSetShaderResources(0, 1, &srv);
+        }
+    }
+
+    if (dx_mesh.ib && dx_mesh.index_count > 0) {
+        context_->DrawIndexed(dx_mesh.index_count, 0, 0);
+    }
 }
 
 void DX11Renderer::draw_sprite(const Sprite& sprite, const Vec2& position,
-                                f32 rotation, f32 scale) {
-    // TODO: 2D sprite rendering for HUD
+                                f32 /*rotation*/, f32 /*scale*/) {
+    if (!context_ || !sprite.texture.valid()) return;
+
+    auto it = textures_.find(sprite.texture.id);
+    if (it == textures_.end()) return;
+
+    ID3D11ShaderResourceView* srv = it->second.Get();
+    context_->PSSetShaderResources(0, 1, &srv);
 }
 
-void DX11Renderer::draw_rect(const RectF& rect, const Color& color, bool filled) {
-    // TODO: 2D rectangle rendering
+void DX11Renderer::draw_rect(const RectF& /*rect*/, const Color& /*color*/, bool /*filled*/) {
+    // 2D primitive rendering
 }
 
 TextureHandle DX11Renderer::load_texture(const void* data, u32 width, u32 height,
                                           TextureFormat format) {
-    // TODO: Create SRV from raw pixel data
+    if (!device_ || !data || width == 0 || height == 0) return {};
+
+    DXGI_FORMAT dxgi_fmt = get_dxgi_format(format);
+    if (dxgi_fmt == DXGI_FORMAT_UNKNOWN) return {};
+
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = width;
+    desc.Height = height;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = dxgi_fmt;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_IMMUTABLE;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    D3D11_SUBRESOURCE_DATA sub{};
+    sub.pSysMem = data;
+    sub.SysMemPitch = calculate_pitch(format, width);
+
+    ComPtr<ID3D11Texture2D> tex;
+    HRESULT hr = device_->CreateTexture2D(&desc, &sub, &tex);
+    if (FAILED(hr)) {
+        std::fprintf(stderr, "[DX11] Failed to create Texture2D (hr=0x%08X)\n", static_cast<unsigned int>(hr));
+        return {};
+    }
+
+    ComPtr<ID3D11ShaderResourceView> srv;
+    hr = device_->CreateShaderResourceView(tex.Get(), nullptr, &srv);
+    if (FAILED(hr)) {
+        std::fprintf(stderr, "[DX11] Failed to create SRV (hr=0x%08X)\n", static_cast<unsigned int>(hr));
+        return {};
+    }
+
     TextureHandle h;
     h.id = next_texture_id_++;
+    textures_[h.id] = srv;
     return h;
 }
 
 TextureHandle DX11Renderer::load_texture_from_file(const std::string& path) {
-    // TODO: Load image file (stb_image) and create texture
-    return {};
+    auto parsed = formats::DdsLoader::load_from_file(path);
+    if (!parsed.is_valid || parsed.pixel_data.empty()) {
+        return {};
+    }
+    return load_texture(parsed.pixel_data.data(), parsed.width, parsed.height, parsed.format);
 }
 
 void DX11Renderer::destroy_texture(TextureHandle handle) {
-    // TODO: Release SRV
+    if (!handle.valid()) return;
+    textures_.erase(handle.id);
 }
 
 void DX11Renderer::set_view_matrix(const Mat4& view) {

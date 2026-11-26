@@ -70,6 +70,7 @@ set(CORE_HEADERS
 
 # Rendering - abstract interface
 set(RENDER_COMMON_SOURCES
+    src/render/renderer.cpp
     src/render/common/vertex.cpp
 )
 
@@ -92,10 +93,14 @@ set(INPUT_HEADERS
 # Audio
 set(AUDIO_SOURCES
     src/audio/audio_manager.cpp
+    src/audio/adx_decoder.cpp
+    src/audio/wav_loader.cpp
 )
 
 set(AUDIO_HEADERS
     src/audio/audio_manager.h
+    src/audio/adx_decoder.h
+    src/audio/wav_loader.h
 )
 
 # Scene
@@ -119,10 +124,16 @@ set(UI_HEADERS
 # File format parsers
 set(FORMAT_SOURCES
     src/formats/format_registry.cpp
+    src/formats/afs_archive.cpp
+    src/formats/dds_loader.cpp
+    src/formats/xmx_loader.cpp
 )
 
 set(FORMAT_HEADERS
     src/formats/format_registry.h
+    src/formats/afs_archive.h
+    src/formats/dds_loader.h
+    src/formats/xmx_loader.h
 )
 
 # Video / FMV playback

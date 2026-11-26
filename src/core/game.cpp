@@ -4,6 +4,11 @@
 #include "core/game.h"
 #include "render/renderer.h"
 #include "input/input_manager.h"
+#include "audio/audio_manager.h"
+#include "scene/scene_manager.h"
+#include "ui/hud.h"
+#include "physics/hit_detection.h"
+#include "formats/format_registry.h"
 
 #include <SDL.h>
 #include <cstdio>
@@ -68,6 +73,18 @@ bool Game::init(int argc, char* argv[]) {
     if (!init_input())    return false;
     if (!init_audio())    return false;
 
+    // Initialize scene manager
+    scene_ = std::make_unique<SceneManager>();
+    if (!scene_->init())  return false;
+
+    // Initialize formats / asset registry
+    formats::FormatRegistry::instance().init(config_manager_.config().game_data_path);
+
+    // Initialize HUD overlay
+    hud_ = std::make_unique<Hud>();
+    if (!hud_->init()) return false;
+    hud_->load_textures(renderer_.get(), config_manager_.config().game_data_path.parent_path() / "extracted");
+
     // Register game states
     init_states();
 
@@ -113,6 +130,7 @@ void Game::shutdown() {
     input_.reset();
     audio_.reset();
     scene_.reset();
+    hud_.reset();
 
     if (window_) {
         SDL_DestroyWindow(window_);
@@ -220,8 +238,10 @@ bool Game::init_input() {
 
 bool Game::init_audio() {
     std::printf("[Game] Initializing audio system...\n");
-    // TODO: Initialize OpenAL Soft
-    return true;
+    audio_ = std::make_unique<AudioManager>();
+    audio_->set_paths(config_manager_.config().game_data_path,
+                      config_manager_.config().game_data_path.parent_path() / "extracted");
+    return audio_->init();
 }
 
 void Game::init_states() {
@@ -305,6 +325,64 @@ void Game::process_events() {
 void Game::update(f64 dt) {
     if (input_) {
         input_->update();
+
+        if (hud_) {
+            const auto& p1_input = input_->player(0);
+            f32 screen_w = static_cast<f32>(config_manager_.config().screen_width);
+            f32 screen_h = static_cast<f32>(config_manager_.config().screen_height);
+
+            hud_->player1().crosshair_pos = {
+                p1_input.cursor_pos.x * screen_w,
+                p1_input.cursor_pos.y * screen_h
+            };
+
+            // Player 1 Trigger / Shooting
+            if (p1_input.is_pressed(Button::Trigger)) {
+                if (hud_->player1().ammo > 0) {
+                    hud_->player1().ammo--;
+                    if (audio_) {
+                        audio_->play_sfx("gun08"); // Shotgun blast sound
+                    }
+                } else {
+                    if (audio_) {
+                        audio_->play_sfx("cursor02"); // Empty click
+                    }
+                }
+            }
+
+            // Player 1 Reload
+            if (p1_input.is_pressed(Button::Reload) || (!p1_input.gun_on_screen && p1_input.is_pressed(Button::Trigger))) {
+                hud_->player1().ammo = hud_->player1().max_ammo;
+                if (audio_) {
+                    audio_->play_sfx("gun_set"); // Shotgun pump reload sound
+                }
+            }
+
+            // Coin insert
+            if (p1_input.is_pressed(Button::Coin)) {
+                hud_->set_credits(hud_->credits() + 1);
+                if (audio_) {
+                    audio_->play_sfx("cursor01");
+                }
+            }
+
+            // Start button
+            if (p1_input.is_pressed(Button::Start)) {
+                if (state_machine_.current_state() == GameState::TitleScreen) {
+                    state_machine_.change_state(GameState::Gameplay);
+                }
+            }
+        }
+    }
+
+    if (audio_) {
+        audio_->update(dt);
+    }
+    if (scene_) {
+        scene_->update(dt);
+    }
+    if (hud_) {
+        hud_->update(dt);
     }
 
     state_machine_.update();
@@ -315,8 +393,13 @@ void Game::render() {
 
     renderer_->begin_frame(Color::black());
 
-    // TODO: Render based on current state
-    // The state's update callback should queue draw calls
+    if (scene_) {
+        scene_->render(renderer_.get());
+    }
+
+    if (hud_) {
+        hud_->render(renderer_.get());
+    }
 
     renderer_->end_frame();
 }
@@ -349,7 +432,9 @@ void Game::state_logo_exit() {
 
 void Game::state_title_enter() {
     std::printf("[Title] Press Start!\n");
-    // TODO: Load title screen assets, play title BGM
+    if (audio_) {
+        audio_->play_bgm("bgm001", true);
+    }
 }
 
 void Game::state_title_update() {
@@ -371,6 +456,13 @@ void Game::state_attract_update() {
 
 void Game::state_gameplay_enter() {
     std::printf("[Gameplay] Starting gameplay...\n");
+    if (scene_) {
+        scene_->load_chapter(ChapterId::Chapter1_Entrance);
+        scene_->load_stage_geometry(renderer_.get(), config_manager_.config().game_data_path.parent_path() / "extracted");
+    }
+    if (audio_) {
+        audio_->play_bgm("bgmst1", true);
+    }
 }
 
 void Game::state_gameplay_update() {

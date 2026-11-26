@@ -13,6 +13,7 @@
 #include <dxgi1_2.h>
 #include <d3dcompiler.h>
 #include <wrl/client.h>  // ComPtr
+#include <unordered_map>
 
 namespace hotd3 {
 
@@ -87,6 +88,14 @@ private:
     // Resource tracking
     u32 next_texture_id_ = 1;
     u32 next_mesh_id_ = 1;
+
+    struct DX11Mesh {
+        ComPtr<ID3D11Buffer> vb;
+        ComPtr<ID3D11Buffer> ib;
+        u32 index_count = 0;
+    };
+    std::unordered_map<u32, DX11Mesh> meshes_;
+    std::unordered_map<u32, ComPtr<ID3D11ShaderResourceView>> textures_;
 
     // Internal methods
     bool create_device_and_swap_chain(SDL_Window* window);

@@ -82,6 +82,8 @@ struct Color {
     static Color black()  { return {0, 0, 0, 1}; }
     static Color red()    { return {1, 0, 0, 1}; }
     static Color green()  { return {0, 1, 0, 1}; }
+    static Color blue()   { return {0, 0, 1, 1}; }
+    static Color yellow() { return {1, 1, 0, 1}; }
 };
 
 // ── Handle types ─────────────────────────────────────────────────────────────
