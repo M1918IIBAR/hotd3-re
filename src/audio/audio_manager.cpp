@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "audio/audio_manager.h"
+#include "audio/aiff_loader.h"
 #include <cstdio>
 #include <algorithm>
 
@@ -79,12 +80,21 @@ void AudioManager::play_sfx(const std::string& sound_name, f32 volume) {
     if (!initialized_) return;
 
     if (sfx_cache_.find(sound_name) == sfx_cache_.end()) {
+        // SFX are stored as Apple AIFF files in game_data/media/
         auto sfx_path = game_data_path_ / "media" / (sound_name + ".aif");
         if (std::filesystem::exists(sfx_path)) {
-            auto wav = audio::WavLoader::load_from_file(sfx_path);
-            if (wav.is_valid) {
-                sfx_cache_[sound_name] = std::move(wav);
+            auto aiff = audio::AiffLoader::load_from_file(sfx_path);
+            if (aiff.is_valid) {
+                std::printf("[Audio] Loaded SFX: %s (%u Hz, %u ch, %u bit, %zu bytes)\n",
+                            sound_name.c_str(), aiff.sample_rate, aiff.channels,
+                            aiff.bits_per_sample,
+                            aiff.pcm_data.size());
+                sfx_cache_[sound_name] = std::move(aiff);
+            } else {
+                std::fprintf(stderr, "[Audio] Failed to load SFX: %s\n", sfx_path.string().c_str());
             }
+        } else {
+            std::fprintf(stderr, "[Audio] SFX file not found: %s\n", sfx_path.string().c_str());
         }
     }
 

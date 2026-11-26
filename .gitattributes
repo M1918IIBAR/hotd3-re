@@ -1,0 +1,51 @@
+# Normalize line endings to LF on commit, convert to OS-native on checkout.
+* text=auto
+
+# C/C++ source: always LF in repo
+*.cpp  text eol=lf
+*.h    text eol=lf
+*.c    text eol=lf
+
+# Java (Ghidra scripts)
+*.java text eol=lf
+
+# CMake
+CMakeLists.txt text eol=lf
+*.cmake        text eol=lf
+
+# Shell scripts — must stay LF even on Windows
+*.sh   text eol=lf
+
+# PowerShell scripts — keep LF in repo, PS handles both
+*.ps1  text eol=lf
+
+# Markdown / docs
+*.md   text eol=lf
+
+# JSON / YAML / TOML
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.toml text eol=lf
+
+# Windows INI config
+*.ini  text eol=lf
+
+# Binary files — never touch line endings
+*.exe   binary
+*.dll   binary
+*.iso   binary
+*.bin   binary
+*.afs   binary
+*.adx   binary
+*.dds   binary
+*.xmx   binary
+*.sfd   binary
+*.zip   binary
+*.cab   binary
+*.png   binary
+*.jpg   binary
+*.bmp   binary
+*.wav   binary
+*.aif   binary
+*.aiff  binary

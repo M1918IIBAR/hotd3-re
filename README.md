@@ -108,8 +108,8 @@ hotd3-re/
 - [x] Rails camera & scene manager (`src/scene/`)
 - [x] HUD, ammo shells, crosshairs & boss health bar (`src/ui/`)
 - [x] Hit detection & shotgun raycasting (`src/physics/`)
-- [ ] Binary analysis and function labeling in Ghidra
-- [ ] Title screen rendering & attract mode video playback
+- [x] Binary analysis and function labeling in Ghidra
+- [x] Title screen rendering & attract mode video playback
 - [ ] Gameplay systems & enemy AI
 - [ ] Vulkan rendering backend
 - [ ] Cross-platform builds

@@ -21,6 +21,7 @@ class InputManager;
 class AudioManager;
 class SceneManager;
 class Hud;
+class VideoPlayer;
 
 class Game {
 public:
@@ -49,6 +50,7 @@ public:
     AudioManager* audio() { return audio_.get(); }
     SceneManager* scene() { return scene_.get(); }
     Hud* hud() { return hud_.get(); }
+    VideoPlayer* video() { return video_.get(); }
 
     // Global instance (set during init, cleared during shutdown)
     static Game* instance();
@@ -62,6 +64,7 @@ private:
     std::unique_ptr<AudioManager> audio_;
     std::unique_ptr<SceneManager> scene_;
     std::unique_ptr<Hud>          hud_;
+    std::unique_ptr<VideoPlayer>  video_;
 
     // SDL
     SDL_Window* window_ = nullptr;
@@ -77,12 +80,21 @@ private:
     f64  delta_time_ = 0.0;
     f64  total_time_ = 0.0;
 
+    // Title / attract idle timer (seconds without input → attract mode)
+    f64  title_idle_timer_ = 0.0;
+    static constexpr f64 kTitleIdleTimeout = 15.0; // 15 s, same as arcade
+
+    // Logo display timer
+    f64  logo_timer_ = 0.0;
+    static constexpr f64 kLogoDisplayTime = 3.0;    // 3 s
+
     // ── Initialization ───────────────────────────────────────────────────
     bool init_sdl();
     bool init_window();
     bool init_renderer();
     bool init_input();
     bool init_audio();
+    bool init_video();
     void init_states();
 
     // ── Main loop internals ──────────────────────────────────────────────

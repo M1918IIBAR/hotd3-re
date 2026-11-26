@@ -95,12 +95,14 @@ set(AUDIO_SOURCES
     src/audio/audio_manager.cpp
     src/audio/adx_decoder.cpp
     src/audio/wav_loader.cpp
+    src/audio/aiff_loader.cpp
 )
 
 set(AUDIO_HEADERS
     src/audio/audio_manager.h
     src/audio/adx_decoder.h
     src/audio/wav_loader.h
+    src/audio/aiff_loader.h
 )
 
 # Scene

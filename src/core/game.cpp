@@ -9,10 +9,12 @@
 #include "ui/hud.h"
 #include "physics/hit_detection.h"
 #include "formats/format_registry.h"
+#include "video/video_player.h"
 
 #include <SDL.h>
 #include <cstdio>
 #include <chrono>
+#include <filesystem>
 
 namespace hotd3 {
 
@@ -85,6 +87,9 @@ bool Game::init(int argc, char* argv[]) {
     if (!hud_->init()) return false;
     hud_->load_textures(renderer_.get(), config_manager_.config().game_data_path.parent_path() / "extracted");
 
+    // Initialize video player
+    if (!init_video()) return false;
+
     // Register game states
     init_states();
 
@@ -131,6 +136,7 @@ void Game::shutdown() {
     audio_.reset();
     scene_.reset();
     hud_.reset();
+    video_.reset();
 
     if (window_) {
         SDL_DestroyWindow(window_);
@@ -242,6 +248,12 @@ bool Game::init_audio() {
     audio_->set_paths(config_manager_.config().game_data_path,
                       config_manager_.config().game_data_path.parent_path() / "extracted");
     return audio_->init();
+}
+
+bool Game::init_video() {
+    std::printf("[Game] Initializing video player...\n");
+    video_ = std::make_unique<VideoPlayer>();
+    return video_->init();
 }
 
 void Game::init_states() {
@@ -365,13 +377,6 @@ void Game::update(f64 dt) {
                     audio_->play_sfx("cursor01");
                 }
             }
-
-            // Start button
-            if (p1_input.is_pressed(Button::Start)) {
-                if (state_machine_.current_state() == GameState::TitleScreen) {
-                    state_machine_.change_state(GameState::Gameplay);
-                }
-            }
         }
     }
 
@@ -384,6 +389,9 @@ void Game::update(f64 dt) {
     if (hud_) {
         hud_->update(dt);
     }
+    if (video_) {
+        video_->update(dt);
+    }
 
     state_machine_.update();
 }
@@ -393,72 +401,156 @@ void Game::render() {
 
     renderer_->begin_frame(Color::black());
 
-    if (scene_) {
-        scene_->render(renderer_.get());
-    }
-
-    if (hud_) {
-        hud_->render(renderer_.get());
+    // If a video is playing, it takes the whole screen
+    if (video_ && video_->is_playing()) {
+        video_->render(renderer_.get());
+    } else {
+        if (scene_) {
+            scene_->render(renderer_.get());
+        }
+        if (hud_) {
+            hud_->render(renderer_.get());
+        }
     }
 
     renderer_->end_frame();
 }
 
-// ── State handlers (stubs) ───────────────────────────────────────────────────
+// ── State handlers ────────────────────────────────────────────────────────────
 
 void Game::state_init_enter() {
     std::printf("[Init] Starting initialization...\n");
 }
 
 void Game::state_init_update() {
-    // After init, transition to logo
+    // Immediately advance to logo display
     state_machine_.change_state(GameState::Logo);
 }
 
+// ── Logo ──────────────────────────────────────────────────────────────────────
+
 void Game::state_logo_enter() {
-    std::printf("[Logo] Displaying logos...\n");
-    // TODO: Load and display Sega / WOW Entertainment logos
+    std::printf("[Logo] Displaying studio logos...\n");
+    logo_timer_ = 0.0;
+
+    // TODO: load Sega / WOW Entertainment logo textures from extracted/SPR/
+    // For now the screen stays black and we auto-advance.
 }
 
 void Game::state_logo_update() {
-    // TODO: Wait for timer or button press, then go to title
-    // For now, skip to title
-    state_machine_.change_state(GameState::TitleScreen);
-}
-
-void Game::state_logo_exit() {
-    // TODO: Clean up logo textures
-}
-
-void Game::state_title_enter() {
-    std::printf("[Title] Press Start!\n");
-    if (audio_) {
-        audio_->play_bgm("bgm001", true);
+    logo_timer_ += delta_time_;
+    if (logo_timer_ >= kLogoDisplayTime) {
+        state_machine_.change_state(GameState::TitleScreen);
     }
 }
 
+void Game::state_logo_exit() {
+    // TODO: release logo textures
+}
+
+// ── Title Screen ──────────────────────────────────────────────────────────────
+
+void Game::state_title_enter() {
+    std::printf("[Title] Press Start!\n");
+    title_idle_timer_ = 0.0;
+
+    // Start title BGM (bgm001.adx — theme music plays on loop at title screen)
+    if (audio_) {
+        audio_->play_bgm("bgm001", true);
+    }
+
+    // TODO: load title background texture:
+    //   extracted/SPR/<archive>/scr_p_nload_0000.dds (title splash)
+    // TODO: render "Press Start" text overlay, flashing at 1Hz
+}
+
 void Game::state_title_update() {
-    // TODO: Wait for start button, animate "Press Start"
-    // If no input for X seconds, go to attract mode
+    title_idle_timer_ += delta_time_;
+
+    // Any player input resets the idle timer
+    if (input_) {
+        const auto& p1 = input_->player(0);
+        if (p1.is_pressed(Button::Trigger) ||
+            p1.is_pressed(Button::Reload)  ||
+            p1.is_pressed(Button::Start)   ||
+            p1.is_pressed(Button::Coin)) {
+            title_idle_timer_ = 0.0;
+        }
+
+        // Start button → begin game
+        if (p1.is_pressed(Button::Start)) {
+            if (hud_ && hud_->credits() > 0) {
+                hud_->set_credits(hud_->credits() - 1);
+                state_machine_.change_state(GameState::Gameplay);
+                return;
+            }
+        }
+    }
+
+    // No input for kTitleIdleTimeout seconds → attract mode
+    if (title_idle_timer_ >= kTitleIdleTimeout) {
+        state_machine_.change_state(GameState::AttractMode);
+    }
 }
 
 void Game::state_title_exit() {
-    // TODO: Clean up title assets
+    if (audio_) {
+        audio_->stop_bgm();
+    }
+    // TODO: release title textures
 }
+
+// ── Attract Mode ─────────────────────────────────────────────────────────────
 
 void Game::state_attract_enter() {
     std::printf("[Attract] Playing attract sequence...\n");
+
+    // Open and play the attract-mode FMV.
+    // The original game uses mvi/TITLE_US_CS.SFD (Sofdec, MPEG-1 video + ADX).
+    // We open it here; actual decode is pending full Sofdec integration.
+    if (video_) {
+        namespace fs = std::filesystem;
+        fs::path sfd_path =
+            config_manager_.config().game_data_path.parent_path()
+            / "game_data" / "mvi" / "TITLE_US_CS.SFD";
+
+        if (video_->open_file(sfd_path.string())) {
+            video_->play();
+            std::printf("[Attract] Playing %s\n", sfd_path.string().c_str());
+        } else {
+            std::printf("[Attract] SFD not found — returning to title in %gs\n",
+                        kTitleIdleTimeout);
+        }
+    }
 }
 
 void Game::state_attract_update() {
-    // TODO: Play demo sequence, return to title on any input
+    // Any player input → back to title
+    if (input_) {
+        const auto& p1 = input_->player(0);
+        if (p1.is_pressed(Button::Trigger) ||
+            p1.is_pressed(Button::Start)   ||
+            p1.is_pressed(Button::Coin)) {
+            if (video_) video_->stop();
+            state_machine_.change_state(GameState::TitleScreen);
+            return;
+        }
+    }
+
+    // Video finished → return to title
+    if (!video_ || video_->has_finished() || !video_->is_playing()) {
+        state_machine_.change_state(GameState::TitleScreen);
+    }
 }
 
+// ── Gameplay ─────────────────────────────────────────────────────────────────
+
 void Game::state_gameplay_enter() {
-    std::printf("[Gameplay] Starting gameplay...\n");
+    std::printf("[Gameplay] Starting gameplay — Chapter 1\n");
     if (scene_) {
         scene_->load_chapter(ChapterId::Chapter1_Entrance);
-        scene_->load_stage_geometry(renderer_.get(), config_manager_.config().game_data_path.parent_path() / "extracted");
+        scene_->load_stage_geometry(renderer_.get(),
+            config_manager_.config().game_data_path.parent_path() / "extracted");
     }
     if (audio_) {
         audio_->play_bgm("bgmst1", true);
@@ -466,24 +558,41 @@ void Game::state_gameplay_enter() {
 }
 
 void Game::state_gameplay_update() {
-    // TODO: The core game loop:
-    // 1. Update camera along rail path
-    // 2. Update enemy AI
-    // 3. Process player input (shooting, reloading)
-    // 4. Hit detection
-    // 5. Update score/lives
+    // Core gameplay loop — to be implemented in Phase 2:
+    // 1. Advance camera along rail waypoints
+    // 2. Spawn enemies from stage event table (EVTBL.BIN)
+    // 3. Update enemy AI (patrol → detect → attack → death)
+    // 4. Process hit detection: shotgun ray vs enemy SphereColliders
+    // 5. Update score, lives, chapter progress
+    // 6. Check chapter end condition → next chapter or boss fight
 }
 
 void Game::state_gameplay_exit() {
-    // TODO: Clean up chapter resources
+    if (audio_) {
+        audio_->stop_bgm();
+    }
+    // TODO: unload chapter geometry / enemy objects
 }
+
+// ── Boss Fight ────────────────────────────────────────────────────────────────
 
 void Game::state_boss_enter() {
     std::printf("[Boss] Boss encounter!\n");
+    if (audio_) {
+        audio_->play_bgm("bgmboss", true);
+    }
+    if (hud_) {
+        // Show boss health bar at 100 %
+        hud_->set_boss_health(1.0f);
+    }
 }
 
 void Game::state_boss_update() {
-    // TODO: Boss AI patterns, weak point system
+    // Boss AI — to be implemented in Phase 2:
+    // 1. Cycle through attack patterns (charge, projectile, grab)
+    // 2. Detect hits on weak points (SphereCollider per weak point)
+    // 3. Advance damage phases (3 phases typical for HOTD3 bosses)
+    // 4. On death: trigger cutscene, restore normal gameplay state
 }
 
 } // namespace hotd3

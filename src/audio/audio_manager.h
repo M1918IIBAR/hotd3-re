@@ -8,6 +8,7 @@
 #include "core/types.h"
 #include "audio/adx_decoder.h"
 #include "audio/wav_loader.h"
+#include "audio/aiff_loader.h"
 
 #include <string>
 #include <memory>
@@ -34,7 +35,7 @@ public:
     void resume_bgm();
     void stop_bgm();
 
-    // Sound effects (media/*.aif WAV files)
+    // Sound effects (media/*.aif — Apple AIFF format)
     void play_sfx(const std::string& sound_name, f32 volume = 1.0f);
 
     // Voice lines (VOICE_US.AFS)
@@ -65,8 +66,8 @@ private:
     bool bgm_playing_ = false;
 
     // Audio caches
-    std::unordered_map<std::string, audio::WavAudioData> sfx_cache_;
-    std::unordered_map<std::string, audio::AdxAudioData> bgm_cache_;
+    std::unordered_map<std::string, audio::AiffAudioData> sfx_cache_;
+    std::unordered_map<std::string, audio::AdxAudioData>  bgm_cache_;
 };
 
 } // namespace hotd3
