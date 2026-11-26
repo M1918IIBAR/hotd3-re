@@ -26,9 +26,7 @@ std::unique_ptr<IRenderer> create_renderer(RendererBackend backend) {
 
 #ifdef HOTD3_HAS_VULKAN
         case RendererBackend::Vulkan:
-            // return std::make_unique<VulkanRenderer>();
-            std::fprintf(stderr, "[Renderer] Vulkan backend not yet implemented\n");
-            return nullptr;
+            return std::make_unique<VulkanRenderer>();
 #endif
 
         default:

@@ -222,6 +222,27 @@ if(HOTD3_BUILD_VULKAN)
         )
         target_link_libraries(hotd3-re PRIVATE Vulkan::Vulkan)
         target_compile_definitions(hotd3-re PRIVATE HOTD3_HAS_VULKAN)
+        if(Vulkan_GLSLC_EXECUTABLE)
+            file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/shaders")
+            add_custom_command(
+                OUTPUT
+                    "${CMAKE_BINARY_DIR}/shaders/basic.vert.spv"
+                    "${CMAKE_BINARY_DIR}/shaders/basic.frag.spv"
+                COMMAND ${Vulkan_GLSLC_EXECUTABLE}
+                    "${CMAKE_SOURCE_DIR}/shaders/basic.vert" -o "${CMAKE_BINARY_DIR}/shaders/basic.vert.spv"
+                COMMAND ${Vulkan_GLSLC_EXECUTABLE}
+                    "${CMAKE_SOURCE_DIR}/shaders/basic.frag" -o "${CMAKE_BINARY_DIR}/shaders/basic.frag.spv"
+                DEPENDS
+                    "${CMAKE_SOURCE_DIR}/shaders/basic.vert"
+                    "${CMAKE_SOURCE_DIR}/shaders/basic.frag"
+                COMMENT "Compiling Vulkan GLSL shaders to SPIR-V"
+            )
+            add_custom_target(hotd3-shaders ALL DEPENDS
+                "${CMAKE_BINARY_DIR}/shaders/basic.vert.spv"
+                "${CMAKE_BINARY_DIR}/shaders/basic.frag.spv"
+            )
+            add_dependencies(hotd3-re hotd3-shaders)
+        endif()
         message(STATUS "Vulkan backend: ENABLED")
     else()
         message(WARNING "Vulkan SDK not found. Vulkan backend disabled.")
@@ -229,7 +250,13 @@ if(HOTD3_BUILD_VULKAN)
 endif()
 
 # ── Link SDL2 ────────────────────────────────────────────────────────────────
-if(SDL2_FOUND)
+if(TARGET SDL2::SDL2)
+    target_link_libraries(hotd3-re PRIVATE SDL2::SDL2)
+    if(TARGET SDL2::SDL2main)
+        target_link_libraries(hotd3-re PRIVATE SDL2::SDL2main)
+    endif()
+    target_compile_definitions(hotd3-re PRIVATE HOTD3_HAS_SDL2)
+elseif(SDL2_FOUND)
     target_include_directories(hotd3-re PRIVATE ${SDL2_INCLUDE_DIRS})
     target_link_libraries(hotd3-re PRIVATE ${SDL2_LIBRARIES})
     target_compile_definitions(hotd3-re PRIVATE HOTD3_HAS_SDL2)

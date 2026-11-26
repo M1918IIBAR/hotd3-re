@@ -111,8 +111,9 @@ hotd3-re/
 - [x] Binary analysis and function labeling in Ghidra
 - [x] Title screen rendering & attract mode video playback
 - [x] Gameplay systems & enemy AI
-- [ ] Vulkan rendering backend
-- [ ] Cross-platform builds
+- [ ] Working Windows build (MSVC + CMake + SDL2 + DX11)
+- [x] Vulkan rendering backend *(implemented; pending SDK compile)*
+- [ ] Cross-platform builds *(deferred until Windows build is working)*
 
 ## Contributing
 
