@@ -84,9 +84,11 @@ In *The House of the Dead III*, several AFS containers (such as `SPR.AFS`, `MDL.
 ### 3.2 3D Models & Stages (`.xmx`, `.x3x`)
 * **Character/Enemy Models (`.xmx`)**:
   * Header Magic: `4C-44-4D-58-58-4F-42-58` (`XMDL` + `XBOX` in little-endian format).
-  * Sub-header: `MDEL` (`4C-45-44-4D`).
+  * Sub-header at `0x10`: `LEDM` (`4C-45-44-4D`). All `VPRG` data offsets are relative to `0x10`.
+  * Chunk tags (reversed 4CC): `EMAN` (`NAME`), `RTAM` (`MATR`), `MNXT` (`TXNM`), `VPRG` (`GRPV`), `XTRV` (`VRTX`), `XDNI` (`INDX`).
+  * `VPRG` layout: `+0x0C` = `u32 vertex_count`, `+0x14` = `u32 xtrv_rel`, `+0x30` = `u32 d3d8_fvf`, `+0x34` = `u32 vertex_stride`, `+0x44` = `u32 xdni_rel`, `+0x48` = `u32 index_count`.
+  * `XDNI` stores 16-bit triangle-strip indices (`D3DPT_TRIANGLESTRIP`).
   * Originates from Sega Chihiro arcade hardware (Xbox XDK architecture).
-  * Contains indexed triangle strips/lists, bone weights, vertex positions, normals, and UV coordinates compatible with modern GPU vertex buffers.
 * **Stage Environment Geometry (`.x3x` in `X3D.AFS`)**:
   * Header Magic: `4F-44-33-58-58-4F-42-58` (`X3DO` + `XBOX` in little-endian format).
   * Sub-header: `OBJ3` (`33-4A-42-4F`).

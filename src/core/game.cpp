@@ -10,6 +10,7 @@
 #include "physics/hit_detection.h"
 #include "formats/format_registry.h"
 #include "video/video_player.h"
+#include "gameplay/enemy_manager.h"
 
 #include <SDL.h>
 #include <cstdio>
@@ -90,6 +91,10 @@ bool Game::init(int argc, char* argv[]) {
     // Initialize video player
     if (!init_video()) return false;
 
+    // Initialize enemy manager
+    enemies_ = std::make_unique<EnemyManager>();
+    if (!enemies_->init(renderer_.get())) return false;
+
     // Register game states
     init_states();
 
@@ -126,6 +131,11 @@ void Game::run() {
 
 void Game::shutdown() {
     std::printf("[Game] Shutting down...\n");
+
+    if (enemies_) {
+        enemies_->shutdown(renderer_.get());
+        enemies_.reset();
+    }
 
     if (renderer_) {
         renderer_->shutdown();
@@ -355,6 +365,23 @@ void Game::update(f64 dt) {
                     if (audio_) {
                         audio_->play_sfx("gun08"); // Shotgun blast sound
                     }
+
+                    // Perform shotgun raycast against active enemy hit volumes
+                    auto st = state_machine_.current_state();
+                    if (enemies_ && (st == GameState::Gameplay || st == GameState::BossFight)) {
+                        Ray ray = HitDetection::screen_to_ray(
+                            hud_->player1().crosshair_pos,
+                            { screen_w, screen_h },
+                            Mat4::identity(),
+                            Mat4::identity());
+                        if (scene_) {
+                            ray.origin = scene_->camera_position();
+                        }
+                        auto colliders = enemies_->collect_colliders();
+                        auto hits = HitDetection::cast_shotgun_blast(ray, colliders);
+                        u32 score_gained = enemies_->process_shotgun_hits(hits);
+                        hud_->player1().score += score_gained;
+                    }
                 } else {
                     if (audio_) {
                         audio_->play_sfx("cursor02"); // Empty click
@@ -407,6 +434,9 @@ void Game::render() {
     } else {
         if (scene_) {
             scene_->render(renderer_.get());
+        }
+        if (enemies_) {
+            enemies_->render(renderer_.get());
         }
         if (hud_) {
             hud_->render(renderer_.get());
@@ -547,10 +577,19 @@ void Game::state_attract_update() {
 
 void Game::state_gameplay_enter() {
     std::printf("[Gameplay] Starting gameplay — Chapter 1\n");
+    if (hud_) {
+        hud_->player1().is_active = true;
+        hud_->player1().lives     = 3;
+        hud_->player1().ammo      = hud_->player1().max_ammo;
+        hud_->player1().score     = 0;
+    }
     if (scene_) {
         scene_->load_chapter(ChapterId::Chapter1_Entrance);
         scene_->load_stage_geometry(renderer_.get(),
             config_manager_.config().game_data_path.parent_path() / "extracted");
+    }
+    if (enemies_) {
+        enemies_->spawn_chapter_wave(ChapterId::Chapter1_Entrance);
     }
     if (audio_) {
         audio_->play_bgm("bgmst1", true);
@@ -558,20 +597,36 @@ void Game::state_gameplay_enter() {
 }
 
 void Game::state_gameplay_update() {
-    // Core gameplay loop — to be implemented in Phase 2:
-    // 1. Advance camera along rail waypoints
-    // 2. Spawn enemies from stage event table (EVTBL.BIN)
-    // 3. Update enemy AI (patrol → detect → attack → death)
-    // 4. Process hit detection: shotgun ray vs enemy SphereColliders
-    // 5. Update score, lives, chapter progress
-    // 6. Check chapter end condition → next chapter or boss fight
+    if (!enemies_) return;
+
+    u32 player_hits = 0;
+    Vec3 player_pos = scene_ ? scene_->camera_position() : Vec3{};
+    enemies_->update(delta_time_, player_pos, player_hits);
+
+    if (player_hits > 0 && hud_) {
+        if (hud_->player1().lives > player_hits) {
+            hud_->player1().lives -= player_hits;
+        } else {
+            hud_->player1().lives = 0;
+            std::printf("[Gameplay] Player out of lives — returning to Title\n");
+            state_machine_.change_state(GameState::TitleScreen);
+            return;
+        }
+    }
+
+    // Wave cleared → advance to boss encounter
+    if (enemies_->alive_count() == 0) {
+        state_machine_.change_state(GameState::BossFight);
+    }
 }
 
 void Game::state_gameplay_exit() {
     if (audio_) {
         audio_->stop_bgm();
     }
-    // TODO: unload chapter geometry / enemy objects
+    if (enemies_) {
+        enemies_->clear();
+    }
 }
 
 // ── Boss Fight ────────────────────────────────────────────────────────────────
@@ -581,18 +636,49 @@ void Game::state_boss_enter() {
     if (audio_) {
         audio_->play_bgm("bgmboss", true);
     }
+    if (enemies_) {
+        enemies_->spawn_chapter_wave(ChapterId::Chapter5_WheelOfFate);
+    }
     if (hud_) {
         // Show boss health bar at 100 %
-        hud_->set_boss_health(1.0f);
+        hud_->show_boss_health("DEATH", 1.0f);
     }
 }
 
 void Game::state_boss_update() {
-    // Boss AI — to be implemented in Phase 2:
-    // 1. Cycle through attack patterns (charge, projectile, grab)
-    // 2. Detect hits on weak points (SphereCollider per weak point)
-    // 3. Advance damage phases (3 phases typical for HOTD3 bosses)
-    // 4. On death: trigger cutscene, restore normal gameplay state
+    if (!enemies_) return;
+
+    u32 player_hits = 0;
+    Vec3 player_pos = scene_ ? scene_->camera_position() : Vec3{};
+    enemies_->update(delta_time_, player_pos, player_hits);
+
+    if (player_hits > 0 && hud_) {
+        if (hud_->player1().lives > player_hits) {
+            hud_->player1().lives -= player_hits;
+        } else {
+            hud_->player1().lives = 0;
+            hud_->hide_boss_health();
+            state_machine_.change_state(GameState::TitleScreen);
+            return;
+        }
+    }
+
+    // Update boss health bar from active boss entity
+    if (hud_) {
+        for (const auto& enemy : enemies_->enemies()) {
+            if (enemy.is_boss) {
+                f32 frac = (enemy.max_health > 0.0f) ? (enemy.health / enemy.max_health) : 0.0f;
+                hud_->show_boss_health("DEATH", frac);
+                break;
+            }
+        }
+    }
+
+    if (enemies_->alive_count() == 0) {
+        if (hud_) hud_->hide_boss_health();
+        std::printf("[Boss] Boss defeated!\n");
+        state_machine_.change_state(GameState::TitleScreen);
+    }
 }
 
 } // namespace hotd3

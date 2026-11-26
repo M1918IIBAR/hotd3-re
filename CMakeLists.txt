@@ -156,6 +156,17 @@ set(PHYSICS_HEADERS
     src/physics/hit_detection.h
 )
 
+# Gameplay / Enemy AI
+set(GAMEPLAY_SOURCES
+    src/gameplay/enemy.cpp
+    src/gameplay/enemy_manager.cpp
+)
+
+set(GAMEPLAY_HEADERS
+    src/gameplay/enemy.h
+    src/gameplay/enemy_manager.h
+)
+
 # ── Main executable ──────────────────────────────────────────────────────────
 add_executable(hotd3-re
     src/main.cpp
@@ -177,6 +188,8 @@ add_executable(hotd3-re
     ${VIDEO_HEADERS}
     ${PHYSICS_SOURCES}
     ${PHYSICS_HEADERS}
+    ${GAMEPLAY_SOURCES}
+    ${GAMEPLAY_HEADERS}
 )
 
 target_include_directories(hotd3-re PRIVATE

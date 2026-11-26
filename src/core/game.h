@@ -22,6 +22,7 @@ class AudioManager;
 class SceneManager;
 class Hud;
 class VideoPlayer;
+class EnemyManager;
 
 class Game {
 public:
@@ -51,6 +52,7 @@ public:
     SceneManager* scene() { return scene_.get(); }
     Hud* hud() { return hud_.get(); }
     VideoPlayer* video() { return video_.get(); }
+    EnemyManager* enemies() { return enemies_.get(); }
 
     // Global instance (set during init, cleared during shutdown)
     static Game* instance();
@@ -65,6 +67,7 @@ private:
     std::unique_ptr<SceneManager> scene_;
     std::unique_ptr<Hud>          hud_;
     std::unique_ptr<VideoPlayer>  video_;
+    std::unique_ptr<EnemyManager> enemies_;
 
     // SDL
     SDL_Window* window_ = nullptr;

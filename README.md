@@ -110,7 +110,7 @@ hotd3-re/
 - [x] Hit detection & shotgun raycasting (`src/physics/`)
 - [x] Binary analysis and function labeling in Ghidra
 - [x] Title screen rendering & attract mode video playback
-- [ ] Gameplay systems & enemy AI
+- [x] Gameplay systems & enemy AI
 - [ ] Vulkan rendering backend
 - [ ] Cross-platform builds
 
